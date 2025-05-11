@@ -4,6 +4,7 @@ import datetime
 import jwt
 import os
 from app.models.user import UserModel, Users
+from app.models.games import Games
 from app.db.connect import conn
 from app.utils.hash import hash_password, verify_password
 
@@ -18,12 +19,14 @@ def register(user: UserModel):
     s = Users.select().where(Users.c.USERNAME == user.username)
     result = conn.execute(s)
     if result.fetchone() is not None:
-      return {"message": "Error: Username already exists"}
+      raise HTTPException(status_code=400, detail="Error: Username already exists")
 
     hashed_password = hash_password(user.password)
 
-    ins = Users.insert().values(USERNAME=user.username, PASSWORD=hashed_password)
-    conn.execute(ins)
+    u_ins = Users.insert().values(USERNAME=user.username, PASSWORD=hashed_password)
+    g_ins = Games.insert().values(USERNAME=user.username, TRACKED=[], WISHLIST=[])
+    conn.execute(u_ins)
+    conn.execute(g_ins)
     conn.commit()
 
     payload = {
@@ -36,7 +39,7 @@ def register(user: UserModel):
     return {"token": encoded}
   except Exception as e:
     print(f"Error occured in /auth/register: {e}")
-    return {"message": "Error occured"}
+    raise HTTPException(status_code=500, detail="Error occured")
 
 @router.post("/login")
 def login(user: UserModel):
@@ -46,11 +49,11 @@ def login(user: UserModel):
     result = conn.execute(s)
     row = result.fetchone()
     if row is None:
-      return {"message": "Error: Username not found"}
+      raise HTTPException(status_code=404, detail="Error: Username not found")
 
     # match passwords (hashed)
     if not verify_password(user.password, row.PASSWORD):
-      return {"message": "Error: Invalid Password"}
+      raise HTTPException(status_code=400, detail="Error: Invalid Password")
 
     payload = {
       "iss": "horizon-backend",
@@ -62,4 +65,4 @@ def login(user: UserModel):
     return {"token": encoded}
   except Exception as e:
     print(f"Error occured in /auth/login: {e}")
-    return {"message": "Error occured"}
+    raise HTTPException(status_code=500, detail="Error occured")
